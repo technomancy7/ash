@@ -1,6 +1,6 @@
-# Freya
+# Ash
 
-Freya is an all-in-one CLI application that is designed to provide a platform for a wide variety of command line utilities.
+Ash (Athena SHell) is an all-in-one CLI application that is designed to provide a platform for a wide variety of command line utilities.
 The idea is that the core is flexible enough that almost any functionality can be built on to it, letting you develop new commands that all use the central framework.
 (Heavily WIP)
 

@@ -17,6 +17,12 @@ export class Action {
         const line = params.join(" ")
         
         switch(cmd) {
+            case "daemon": //TODO read config on loop
+                break
+            case "ls":
+
+                break
+                
             case "countdown":
                 let m = this.ctx.args.m || 0;
                 let h = this.ctx.args.h || 0;
@@ -29,8 +35,8 @@ export class Action {
                 if(h) now = now.add(this.ctx.dayjs.duration(parseInt(h), "hours"))
                 if(d) now = now.add(this.ctx.dayjs.duration(parseInt(d), "days"))
                 console.log(typeof now, now.format())
-                
-                await this.ctx.send_message("timer", "insert", {"text": text, "ts": now.format()})
+                //TODO change to straight config
+                await this.ctx.send_message("timer", {"operation": "insert", "text": text, "ts": now.format()})
                 break;
             
             default:

@@ -64,11 +64,15 @@ class Context {
         }
     }
     
-    async send_message(sender, text, opts = {}) {
+    async send_message(sender, message) {
         let messages = await Bun.file(this.home+"/messages.toml").text()
         let md = TOML.parse(messages)
-        if(!md[sender]) md[sender] = [];
-        md[sender].push({"message": text, "options": opts});
+        
+        if(!md[sender]) md[sender] = {};
+        let key = this.randomAlphaNumeric(5)
+        while(Object.keys(md[sender]).includes(key)) this.randomAlphaNumeric(5)
+                    
+        md[sender][key] = message;
         
         await Bun.write(this.home+"/messages.toml", TOML.stringify(md));
     }
