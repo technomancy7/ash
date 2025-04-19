@@ -1,5 +1,5 @@
 const argv = require('yargs-parser')(process.argv.slice(2))
-import TOML from 'smol-toml'
+import TOML from 'smol-toml';
 import { Glob } from "bun";
 import { $ } from "bun";
 const dayjs = require('dayjs')
@@ -7,7 +7,9 @@ var relativeTime = require("dayjs/plugin/relativeTime");
 dayjs.extend(relativeTime)
 var customParseFormat = require("dayjs/plugin/customParseFormat");
 dayjs.extend(customParseFormat);
-const FREYA_VERSION = "25.04.12"
+var duration = require("dayjs/plugin/duration");
+dayjs.extend(duration);
+const ASH_VERSION = "25.04.19"
 
 class Context {
     constructor() {
@@ -16,7 +18,7 @@ class Context {
         this.command = ""
         this.line = []
         this.config = {}
-        this.home = process.env.OVERRIDE_HOME || process.env.HOME+"/.freya/";
+        this.home = process.env.OVERRIDE_HOME || process.env.HOME+"/.ash/";
         this.data_dir = this.home+"/data/"
         this.glob = new Glob("*");
         this.fmt = {
@@ -60,6 +62,22 @@ class Context {
             "poop": "💩",
             "rocket": "🚀"
         }
+    }
+    
+    async send_message(sender, text, opts = {}) {
+        let messages = await Bun.file(this.home+"/messages.toml").text()
+        let md = TOML.parse(messages)
+        if(!md[sender]) md[sender] = [];
+        md[sender].push({"message": text, "options": opts});
+        
+        await Bun.write(this.home+"/messages.toml", TOML.stringify(md));
+    }
+    
+    async get_messages(sender) {
+        let messages = await Bun.file(this.home+"/messages.toml").text()
+        let md = TOML.parse(messages)
+        if(!md[sender]) return null;
+        return md[sender];
     }
     
     randomAlphaNumeric(length) {
@@ -204,11 +222,11 @@ class Context {
     }
     
     async save_config() {
-        await Bun.write(this.home+"/freya.toml", TOML.stringify(this.config));
+        await Bun.write(this.home+"/ash.toml", TOML.stringify(this.config));
     }
     
     async load_config() {
-        let c = await Bun.file(this.home+"/freya.toml").text()
+        let c = await Bun.file(this.home+"/ash.toml").text()
         this.config = TOML.parse(c)
     }
     
@@ -274,7 +292,7 @@ class Context {
     
     say(text, tts = false) {
         //TTS NOT YET IMPLEMENTED
-        let name = this.get_config("self.name", "Freya");
+        let name = this.get_config("self.name", "Athena");
         this.writeln(`([green]${name}[reset])> ${text}`)
     }
     
@@ -384,7 +402,7 @@ class Context {
 
                 return;
             }else{
-                this.writeln("FREYA.CLI."+FREYA_VERSION)
+                this.writeln("ASH.CLI."+ASH_VERSION)
                 this.writeln("\nActions:")
                 for (const file of this.glob.scanSync(this.home+"actions")) {
                     let key = file.split(".")[0].toLowerCase();
