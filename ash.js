@@ -44,6 +44,9 @@ class Context {
             "smile": "😊",
             "heart": "❤️",
             "thumbs_up": "👍",
+            "thumbs_down": "👎",
+            "link": "🔗",
+            "speech_bubble": "💬",
             "clap": "👏",
             "fire": "🔥",
             "star": "⭐",
@@ -60,30 +63,41 @@ class Context {
             "hug": "🤗",
             "sleepy": "😴",
             "poop": "💩",
-            "rocket": "🚀"
+            "rocket": "🚀",
+            "clubs": "♣️",
+            "diamonds": "♦️",
+            "spades": "♠️",
+            "hearts": "♥️"
         }
     }
-    
+
+    async ocr(image_path) {
+        const proc = Bun.spawn(["tesseract", image_path, "-"]);
+        const text = await new Response(proc.stdout).text();
+
+        return text
+    }
+
     async send_message(sender, message) {
         let messages = await Bun.file(this.home+"/messages.toml").text()
         let md = TOML.parse(messages)
-        
+
         if(!md[sender]) md[sender] = {};
         let key = this.randomAlphaNumeric(5)
         while(Object.keys(md[sender]).includes(key)) this.randomAlphaNumeric(5)
-                    
+
         md[sender][key] = message;
-        
+
         await Bun.write(this.home+"/messages.toml", TOML.stringify(md));
     }
-    
+
     async get_messages(sender) {
         let messages = await Bun.file(this.home+"/messages.toml").text()
         let md = TOML.parse(messages)
         if(!md[sender]) return null;
         return md[sender];
     }
-    
+
     randomAlphaNumeric(length) {
         let s = '';
         Array.from({ length }).some(() => {
@@ -99,14 +113,14 @@ class Context {
         await $`curl --skip-existing --output ${out_path+filename} "${url}"`
         return out_path+filename, filename
     }
-        
-        
+
+
     async edit_file(path) {
         let editor = this.get_config("tools.editor")
         console.log("Opening", path, "in tools.editor: ", editor)
         await $`${editor} ${path}`;
     }
-    
+
     coerce_type(input) {
         // Trim the input to remove extra whitespace
         const trimmedInput = input.trim();
@@ -131,7 +145,7 @@ class Context {
         ) {
             return trimmedInput.slice(1, -1); // Remove surrounding quotes
         }
-        
+
         // Default to returning the original string
         return trimmedInput;
     }
@@ -140,20 +154,20 @@ class Context {
     }
     format_text(text) {
         for(const [name, colour] of Object.entries(this.fmt)) {
-           text = text.replaceAll(`[${name}]`, colour); 
+           text = text.replaceAll(`[${name}]`, colour);
         }
-        
+
         for(const [name, emoji] of Object.entries(this.emojis)) {
-           text = text.replaceAll(`:${name}:`, emoji); 
+           text = text.replaceAll(`:${name}:`, emoji);
         }
-        
+
         return text;
     }
     writeln(text) {
         text = this.format_text(text);
         console.log(text);
     }
-    
+
     async filter_choice(choices) {
         /*if(choices.length == 1) return choices[0]
         let fmt = [];
@@ -168,7 +182,7 @@ class Context {
 
         return text
     }
-    
+
     async get_choice(choices) {
         /*if(choices.length == 1) return choices[0]
         let fmt = [];
@@ -182,8 +196,8 @@ class Context {
 
         return text
     }
-    
-    
+
+
     async get_input(placeholder) {
         //const res = await $`gum input --placeholder "${placeholder}"`;
         //return res.text().trim();
@@ -192,16 +206,16 @@ class Context {
 
         return text
     }
-    
+
     async write_panel(title, text) {
         text = this.format_text(text);
         await $`gum style --border double "${this.fmt.bold}[${title}]${this.fmt.reset}" "${text}"`
-        
+
         //const proc = Bun.spawn(["gum", "style", "--border", "double", "--width", 50, `${this.fmt.bold}[${title}]${this.fmt.reset}`, text ]);
         //const out = await new Response(proc.stdout).text();
         //console.log(out)
     }
-    
+
     async load_all_data(directory) {
         let output = {}
 
@@ -211,7 +225,7 @@ class Context {
         }
         return output;
     }
-    
+
     async load_data(directory, filename = "data") {
         let confile = Bun.file(this.home+"/data/"+directory+"/"+filename+".toml")
         let exists = await confile.exists();
@@ -220,91 +234,93 @@ class Context {
             return TOML.parse(text)
         } else return {}
     }
-    
+
     async save_data(store, directory, filename = "data") {
         await Bun.write(this.home+"/data/"+directory+"/"+filename+".toml", TOML.stringify(store));
     }
-    
+
     async save_config() {
         await Bun.write(this.home+"/ash.toml", TOML.stringify(this.config));
     }
-    
+
     async load_config() {
         let c = await Bun.file(this.home+"/ash.toml").text()
         this.config = TOML.parse(c)
     }
-    
+
     set_config(key, value) {
         if(key.includes(".")) {
             let parent = key.split(".")[0];
             let sub = key.split(".")[1];
-            
+
             if(this.config[parent] == undefined) this.config[parent] = {}
             this.config[parent][sub] = value;
-            
+
         } else {
             this.config[key] = value;
         }
     }
-    
+
     get_config(key, default_value = undefined) {
         if(key.includes(".")) {
             let parent = key.split(".")[0];
             let sub = key.split(".")[1];
-            
+
             if(this.config[parent] == undefined) return default_value
             if(this.config[parent][sub] == undefined) return default_value
             return this.config[parent][sub];
-            
+
         } else {
             return this.config[key] || default_value;
         }
     }
-    
+
     incr(key, m = 1) {
         let v = this.get_config(key, 1);
         this.set_config(key, v + m);
         return v + m;
     }
-    
+
     decr(key, m = 1) {
         let v = this.get_config(key, 1);
         this.set_config(key, v - m);
         return v - m;
     }
-    
+
     process_args(args) {
         this.args = args;
         this.command = args._[0]
         this.line = args._.slice(1)
+
+        if(this.get_config("self.always_json") == true) this.args.json = true
     }
-    
+
     get_action(name) {
         const cmd_path = this.home+"/actions/"+name+".js";
         const action = require(cmd_path);
         let act = new action.Action(this);
         return act;
     }
-    
+
     clone() {
         //return structuredClone(this)
         let ctx = new Context()
         ctx.config = this.config;
-        
+
         return ctx;
     }
-    
+
     say(text, tts = false) {
         //TTS NOT YET IMPLEMENTED
         let name = this.get_config("self.name", "Athena");
         this.writeln(`([green]${name}[reset])> ${text}`)
     }
-    
+
     async get_user_name() {
         let codex = await this.load_data("codex", "addrbook")
         return codex.self["Display Name"] || codex.self.name || "self.user";
     }
-    
+
     async repl() {
         let all_actions = [];
         for (const file of this.glob.scanSync(this.home+"actions")) {
@@ -314,31 +330,31 @@ class Context {
         const username = await this.get_user_name();
         this.say(`Interactive mode activated. What is your request, ${username}?`)
         process.on("SIGINT", async () => { process.exit() });
-        
+
         async function cleanup() { process.exit() }
-        
+
         while(true) {
             try {
                 const prompt = "(> ";
                 process.stdout.write(prompt);
                 for await (const line of console) {
                     this.writeln(`([blue]${username}[reset])> ${line}`);
-                    
+
                     if(line == ".q" || line == "quit") {this.say("Goodbye.");await cleanup();}
-                    
+
                     if(all_actions.includes(line.split(" ")[0])) {
                         await this.execute(line)
                     } else {
-                        if(line.split(" ")[0] == "cd") { 
-                            await $.cwd(line.split(" ").slice(1).join(" ")); 
+                        if(line.split(" ")[0] == "cd") {
+                            await $.cwd(line.split(" ").slice(1).join(" "));
                         } else {
-                           await $`${line}` 
+                           await $`${line}`
                         }
-                        
+
                     }
                     process.stdout.write(prompt);
                 }
-                
+
             } catch (e) {
                 console.error(`Exited. ${e.name} ${e.message}`);
                 process.exit()
@@ -346,7 +362,7 @@ class Context {
         }
         console.log("Ended")
     }
-    
+
     async execute(new_command = undefined) {
         if(new_command) {
             this.command = new_command.split(" ")[0];
@@ -361,15 +377,15 @@ class Context {
             await this.repl();
             return;
         }
-            
+
         const cmd_path = this.home+"/actions/"+this.command+".js";
         const file = Bun.file(cmd_path);
         const cmd_exists = await file.exists();
-        
+
         if(this.command && !cmd_exists){
             return this.writeln("Command does not exist.")
         }
-        
+
         if(this.args.help) {
             if(this.command) {
                 const action = require(cmd_path);
@@ -384,12 +400,12 @@ class Context {
                             let help_line = com.split(",").slice(1).join(",");
                             this.writeln("\t  ↪ "+help_line)
                         } else {
-                            this.writeln("\t"+com) 
+                            this.writeln("\t"+com)
                         }
-                        
+
                     }
                 }
-                
+
                 if(act.help.parameters && act.help.parameters.length >= 1){
                     this.writeln("\nParameters:")
                     for(const parm of act.help.parameters) {
@@ -399,7 +415,7 @@ class Context {
                             let help_line = parm.split(",").slice(1).join(",");
                             this.writeln("\t  ↪ "+help_line)
                         } else {
-                            this.writeln("\t"+parm) 
+                            this.writeln("\t"+parm)
                         }
                     }
                 }

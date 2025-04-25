@@ -6,7 +6,7 @@ editor = "kwrite"
 
 [rpg]
 level = 2
-exp = 25
+exp = 175
 
 [memo]
 text = "\\"
@@ -20,3 +20,6 @@ q = "quests"
 [test]
 one = "true"
 num = 5
+
+[self]
+always_json = false

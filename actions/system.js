@@ -41,7 +41,7 @@ export class Action {
                 
             case "config":
                 
-                this.ctx.edit_file(`${this.ctx.home}freya.toml`)
+                this.ctx.edit_file(`${this.ctx.home}ash.toml`)
                 break;
                 
             case "increment":
