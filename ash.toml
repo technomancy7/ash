@@ -3,6 +3,9 @@ directory = "/home/kaiz0r/.appimages/"
 
 [tools]
 editor = "kwrite"
+gui = "zenity"
+shell = "nu"
+tui = "gum"
 
 [rpg]
 level = 2

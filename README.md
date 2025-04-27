@@ -9,11 +9,10 @@ The idea is that the core is flexible enough that almost any functionality can b
 - [X] Application manager
 - [X] Appimage manager
 - [ ] TTS chat responder
-- [ ] Command to open files in editor
+- [X] Command to open files in editor
 - [X] Config editor commands
 - [X] Repl mode using Buns shell interface as a fallback for if input isnt a command
 - [X] RNG commands, number generator, coin flip, select from list
-- [ ] Cards simulator
 - [ ] Tarot
 - [ ] Text Adventure engine
 - [ ] Text-based survival game, oregon trail style

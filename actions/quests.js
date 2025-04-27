@@ -1,3 +1,5 @@
+import { $ } from "bun";
+
 export class Action {
     constructor(ctx) {
         this.ctx = ctx;
@@ -35,7 +37,7 @@ export class Action {
     async on_execute() {
         const cmd = this.ctx.line[0] || "ls";
         const params = this.ctx.line.slice(1)
-        const line = params.join(" ")
+        let line = params.join(" ")
 
         const data = await this.ctx.load_data("quests");
 
@@ -70,11 +72,21 @@ export class Action {
             case "n":
             case "new":
             case "add":
+                if(this.ctx.args.gui && this.ctx.get_config("tools.gui") == "zenity") {
+                    let gui = await $`zenity --forms --add-multiline-entry "Quest Text" --add-entry "EXP"`.text()
+                    let g_text = gui.trim().split("|")[0]
+                    let g_exp = gui.trim().split("|")[1]
+                    if(g_text) line = g_text;
+                    if(g_exp) this.ctx.args.exp = parseInt(g_exp)
+                }
+
+                if(!line) return this.ctx.writeln("What?")
                 let new_quest = {
                     "text": line,
                     "exp": Number(this.ctx.args.exp) || 0,
                     "ts": this.ctx.dayjs().format()
                 }
+
                 let key = this.ctx.args.key || this.ctx.randomAlphaNumeric(5);
                 while(Object.keys(data).includes(key)) key = this.ctx.randomAlphaNumeric(5);
 
@@ -87,6 +99,19 @@ export class Action {
 
             case "delete":
             case "del":
+                if(!line) {
+                    if(this.ctx.get_config("tools.tui") == "gum") {
+                        let keys = [];
+                        for(const [key, quest] of Object.entries(data)) { keys.push(`${key}|${quest.text}`) }
+                        let c = await this.ctx.filter_choice(keys)
+                        let key = c.split("|")[0];
+                        delete data[key]
+                        await this.ctx.save_data(data, "quests")
+                    } else this.ctx.writeln("Delete what?")
+
+                    return
+                }
+
                 if(this.ctx.args.completed) {
                     for(const [key, quest] of Object.entries(data)) {
                         if(quest.completed) {
@@ -111,20 +136,32 @@ export class Action {
             case "complete":
             case "c":
             case "done":
-                if(data[line]) {
-                    if(data[line].completed) this.ctx.writeln("Quest already complete.");
-                    else {
-                        data[line].completed = true
-                        await this.ctx.save_data(data, "quests")
-                        this.ctx.writeln(`Quest complete!`)
-                        if(data[line].exp) {
-                            await this.ctx.get_action("rpg").gain_exp(data[line].exp)
+                if(line) {
+                    if(data[line]) {
+                        if(data[line].completed) this.ctx.writeln("Quest already complete.");
+                        else {
+                            data[line].completed = true
+                            await this.ctx.save_data(data, "quests")
+                            this.ctx.writeln(`Quest complete!`)
+                            if(data[line].exp) {
+                                await this.ctx.get_action("rpg").gain_exp(data[line].exp)
 
+                            }
                         }
-                    }
+                    } else return this.ctx.writenln("Couldn't find quest.")
+
 
                 } else {
-                    this.ctx.writeln("Quest not found.")
+                    if(this.ctx.get_config("tools.tui") == "gum") {
+                        let keys = [];
+                        for(const [key, quest] of Object.entries(data)) { if(!quest.completed) keys.push(`${key}|${quest.text}`) }
+                        let c = await this.ctx.filter_choice(keys)
+                        let key = c.split("|")[0];
+                        data[key].completed = true
+                        await this.ctx.save_data(data, "quests")
+                    } else return this.ctx.writenln("Couldn't find quest.")
+
+
                 }
                 break;
 
