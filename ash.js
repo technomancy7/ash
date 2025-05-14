@@ -481,7 +481,4 @@ if(import.meta.main) {
     await ctx.load_config()
     ctx.process_args(argv)
     await ctx.execute()
-} /*else {
-    exports.Context = Context;
 }
-*/
