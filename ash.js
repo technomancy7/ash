@@ -374,7 +374,11 @@ export class AshContext {
     clone(inheritContext = true) {
         let ctx = new AshContext(this)
         ctx.config = this.config;
-        if(inheritContext) ctx.context = this.context;
+        if(inheritContext) {
+            for(let key of Object.keys(this.context)) {
+                ctx.context[key] = this.context[key]
+            }
+        }
         return ctx;
     }
 
@@ -477,12 +481,14 @@ export class AshContext {
         let bypassDisabled = false;
 
         if(this.args.override) {
-            console.log("Trying to override...")
+            console.log(`${this.context.author.username} ${this.context.author_id} is trying to override...`)
             if(this.context.session == "discord") {
-                console.log(`In discord session... Testing: ${this.context.author_id} = ${this.context.owner_id}`)
+                console.log(`In discord session... Testing: ${this.context.owner_id}`)
                 if(this.context.author_id == this.context.owner_id) {
                     console.log(`Bypass successful for ${this.context.author_id}`)
                     bypassDisabled = true;
+                } else {
+                    return this.writeln("Authentication failed.")
                 }
             } else {
                 bypassDisabled = true;

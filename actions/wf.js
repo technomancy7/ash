@@ -278,7 +278,7 @@ export class Action {
                 for(const trader of traders) {
                     let ats = this.ctx.dayjs(parseInt(trader.Activation["$date"]["$numberLong"]))
                     let uts = this.ctx.dayjs(parseInt(trader.Expiry["$date"]["$numberLong"]))
-                    if(!this.ctx.args.json) this.ctx.writeln(`:right_arrow: ${trader.Character} arrives at ${this.nodesTable[trader.Node]} ${ats.fromNow()} until ${uts.fromNow()}`);
+                    if(!this.ctx.args.json) this.ctx.writeln(`:right_arrow: ${trader.Character} arrives at ${this.nodesTable[trader.Node]} ${ats.fromNow()} and leaves ${uts.fromNow()} from now.`);
                     else bjs.push({
                         "trader": trader.Character,
                         "location": this.nodesTable[trader.Node],
