@@ -1,7 +1,9 @@
-const argv = require('yargs-parser')(process.argv.slice(2))
+const argParser = require('yargs-parser')
+
 import TOML from 'smol-toml';
 import { Glob } from "bun";
 import { $ } from "bun";
+
 const dayjs = require('dayjs')
 var relativeTime = require("dayjs/plugin/relativeTime");
 dayjs.extend(relativeTime)
@@ -9,15 +11,35 @@ var customParseFormat = require("dayjs/plugin/customParseFormat");
 dayjs.extend(customParseFormat);
 var duration = require("dayjs/plugin/duration");
 dayjs.extend(duration);
+var updateLocale = require('dayjs/plugin/updateLocale')
+
+
+dayjs.extend(updateLocale, {
+  thresholds: [
+    { l: 's', r: 1 }, { l: 'm', r: 1 }, { l: 'mm', r: 59, d: 'minute' }, { l: 'h', r: 1 }, { l: 'hh', r: 23, d: 'hour' },
+    { l: 'd', r: 1 }, { l: 'dd', r: 29, d: 'day' }, { l: 'M', r: 1 }, { l: 'MM', r: 11, d: 'month' },  { l: 'y', r: 1 }, { l: 'yy', d: 'year' }
+  ]
+})
+
+dayjs.updateLocale('en', {
+  relativeTime: {
+    future: "in %s", past: "%s ago", s: 'a few seconds', m: "a minute", mm: "%d minutes", h: "an hour", hh: "%d hours", d: "a day",
+    dd: "%d days", M: "a month", MM: "%d months", y: "a year", yy: "%d years"
+  }
+})
+
 const ASH_VERSION = "25.04.19"
 
 export class AshContext {
-    constructor() {
+    constructor(parent = null) {
+        this.context = {} // A table for storing arbitrary values that may or may not be used for functionality
+        this.parent = parent;
         this.dayjs = dayjs;
         this.args = {}
         this.command = ""
         this.line = []
         this.config = {}
+        this.argParser = argParser;
         this.home = process.env.OVERRIDE_HOME || process.env.HOME+"/.ash/";
         this.data_dir = this.home+"/data/"
         this.glob = new Glob("*");
@@ -172,16 +194,23 @@ export class AshContext {
         var i = 0;
         while (i < arr.length) {
             if (arr[i] === value) {
-            arr.splice(i, 1);
+                arr.splice(i, 1);
             } else {
-            ++i;
+                ++i;
             }
         }
         return arr;
     }
-    xeval(obj) {
-        return eval?.(`"use strict";(${obj})`);
+
+    xeval(obj) { return eval?.(`"use strict";(${obj})`); }
+
+    strip_formatting(text) {
+        for(const [name, colour] of Object.entries(this.fmt)) {
+           text = text.replaceAll(`[${name}]`, "");
+        }
+        return text;
     }
+
     format_text(text) {
         for(const [name, colour] of Object.entries(this.fmt)) {
            text = text.replaceAll(`[${name}]`, colour);
@@ -285,6 +314,10 @@ export class AshContext {
     }
 
     set_config(key, value) {
+        if(this.parent) {
+            this.parent.set_config(key, value)
+        }
+
         if(key.includes(".")) {
             let parent = key.split(".")[0];
             let sub = key.split(".")[1];
@@ -324,9 +357,9 @@ export class AshContext {
     }
 
     process_args(args) {
-        this.args = args;
-        this.command = args._[0]
-        this.line = args._.slice(1)
+        this.args = argParser(args)
+        this.command = this.args._[0]
+        this.line = this.args._.slice(1)
 
         if(this.get_config("self.always_json") == true) this.args.json = true
     }
@@ -338,11 +371,10 @@ export class AshContext {
         return act;
     }
 
-    clone() {
-        //return structuredClone(this)
-        let ctx = new AshContext()
+    clone(inheritContext = true) {
+        let ctx = new AshContext(this)
         ctx.config = this.config;
-
+        if(inheritContext) ctx.context = this.context;
         return ctx;
     }
 
@@ -399,14 +431,78 @@ export class AshContext {
         console.log("Ended")
     }
 
+    contextEnable(...commands) {
+        if(!this.context.disabled) return;
+        for (const arg of commands) {
+            if(this.context.disabled.includes(arg)) {
+                this.context.disabled = this.removeItemAll(this.context.disabled, arg);
+            }
+        }
+    }
+
+    contextDisable(...commands) {
+        if(!this.context.disabled) this.context.disabled = [];
+        for (const arg of commands) {
+            if(!this.context.disabled.includes(arg)) {
+                this.context.disabled.push(arg);
+            }
+        }
+    }
+
+    async globalEnable(...commands) {
+        let disabled = this.get_config("self.disabled", [])
+        for (const arg of commands) {
+            if(disabled.includes(arg)) {
+                disabled = this.removeItemAll(disabled, arg);
+            }
+        }
+        this.set_config("self.disabled", disabled)
+        await this.save_config()
+    }
+
+    async globalDisable(...commands) {
+        let disabled = this.get_config("self.disabled", [])
+        for (const arg of commands) {
+            if(!disabled.includes(arg)) {
+                this.disabled.push(arg);
+            }
+        }
+        this.set_config("self.disabled", disabled)
+        await this.save_config()
+    }
+
     async execute(new_command = undefined) {
-        if(new_command) {
-            this.command = new_command.split(" ")[0];
-            this.line =  new_command.split(" ").slice(1);
+        if(new_command) { this.process_args(new_command.split(" ")) }
+
+        let bypassDisabled = false;
+
+        if(this.args.override) {
+            console.log("Trying to override...")
+            if(this.context.session == "discord") {
+                console.log(`In discord session... Testing: ${this.context.author_id} = ${this.context.owner_id}`)
+                if(this.context.author_id == this.context.owner_id) {
+                    console.log(`Bypass successful for ${this.context.author_id}`)
+                    bypassDisabled = true;
+                }
+            } else {
+                bypassDisabled = true;
+            }
+
         }
-        if(this.command == undefined) {
-            this.args.help = true;
+
+        let disabled = this.get_config("self.disabled", [])
+
+        if(disabled.includes(this.command)) {
+            if(!bypassDisabled) return this.writeln("This command is globally disabled.")
         }
+
+        if(this.context.disabled && this.context.disabled.includes(this.command)) {
+            if(!bypassDisabled) return this.writeln("This command is not available in this context.")
+        }
+
+
+        if(this.command == undefined) { this.args.help = true; }
+
         const alias = await this.get_config("aliases."+this.command)
         if(alias) this.command = alias;
         if(this.command == "repl"){
@@ -418,16 +514,14 @@ export class AshContext {
         const file = Bun.file(cmd_path);
         const cmd_exists = await file.exists();
 
-        if(this.command && !cmd_exists){
-            return this.writeln("Command does not exist.")
-        }
+        if(this.command && !cmd_exists) { return this.writeln("Command does not exist.") }
 
         if(this.args.help) {
             if(this.command) {
                 const action = require(cmd_path);
                 let act = new action.Action(this)
                 this.writeln(`[bold]${act.help.title || this.command}[reset] (v${act.help.version} by ${act.help.author})`)
-                this.writeln(act.help.text);
+                if(act.help.text) this.writeln(act.help.text);
                 if(act.help.commands && act.help.commands.length >= 1){
                     this.writeln("\nCommands:")
                     for(const com of act.help.commands) {
@@ -445,7 +539,6 @@ export class AshContext {
                 if(act.help.parameters && act.help.parameters.length >= 1){
                     this.writeln("\nParameters:")
                     for(const parm of act.help.parameters) {
-                        //this.writeln("\t"+parm)
                         if(parm.includes(",")){
                             this.writeln("\t"+parm.split(",")[0])
                             let help_line = parm.split(",").slice(1).join(",");
@@ -473,12 +566,13 @@ export class AshContext {
         const action = require(cmd_path);
         let act = new action.Action(this)
         await act.on_execute()
+        return this;
     }
 }
 
 if(import.meta.main) {
     let ctx = new AshContext()
     await ctx.load_config()
-    ctx.process_args(argv)
+    ctx.process_args(process.argv.slice(2))
     await ctx.execute()
 }

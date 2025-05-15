@@ -296,7 +296,10 @@ export class Action {
                 let mi = {}
                 let js = []
 
-
+                if(ws.Alerts.length == 0) {
+                    this.ctx.writeln(`No alerts currently active.`)
+                    return;
+                }
                 for(const al of ws.Alerts){
                     mi = al.MissionInfo;
 

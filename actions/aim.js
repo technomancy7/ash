@@ -61,12 +61,12 @@ export class Action {
             case "list":
             case "ls":
                 for (const file of this.ctx.glob.scanSync(aim_dir)) {
-                    console.log(file)
+                    this.ctx.writeln(file)
                 }
                 break;
 
             default:
-                console.log("Unknown command")
+                this.ctx.writeln("Unknown command")
                 break;
         }
     }
