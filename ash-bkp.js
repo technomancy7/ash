@@ -1,5 +1,5 @@
 const argParser = require('yargs-parser')
-var tk = require( 'terminal-kit' ).terminal;
+var tk = require( 'terminal-kit' );
 
 import TOML from 'smol-toml';
 import { Glob } from "bun";
@@ -407,19 +407,13 @@ export class AshContext {
             all_actions.push(key)
         }
 
-        this.writeln = async function(text) {
+        client.writeln = async function(text) {
               tk(this.format_text(this.strip_formatting(text)))
-              tk("\n")
         }
 
-        this.write_panel = async function(title, text) {
-              tk("["+title+"] "+this.format_text(this.strip_formatting(text)))
-              tk("\n")
-        }
-
-        tk.on( 'key' , function( name , matches , data ) {
-            if ( name === 'CTRL_C' ) { process.exit() }
-        });
+        client.write_panel = async function(title, text) {
+              tk("["+title+"] "+text)
+          }
 
         const username = await this.get_user_name();
         this.say(`Interactive mode activated. What is your request, ${username}?`)
@@ -427,31 +421,33 @@ export class AshContext {
 
         async function cleanup() { process.exit() }
 
-        async function repl_loop(client){
+        while(true) {
             try {
-                const prompt = "\n(> ";
-                tk(prompt);
-                var line = await tk.inputField().promise;
+                const prompt = "(> ";
+                process.stdout.write(prompt);
+                for await (const line of console) {
+                    this.writeln(`([blue]${username}[reset])> ${line}`);
 
-                client.writeln(`\n([blue]${username}[reset])> ${line}\n`);
+                    if(line == ".q" || line == "quit") {this.say("Goodbye.");await cleanup();}
 
-                if(line == ".q" || line == "quit") {client.say("Goodbye.");await cleanup();}
-
-                if(all_actions.includes(line.split(" ")[0])) {
-                    await client.execute(line)
-                } else {
-                    if(line.split(" ")[0] == "cd") {
-                        await $.cwd(line.split(" ").slice(1).join(" "));
+                    if(all_actions.includes(line.split(" ")[0])) {
+                        await this.execute(line)
                     } else {
-                        await $`${line}`
+                        if(line.split(" ")[0] == "cd") {
+                            await $.cwd(line.split(" ").slice(1).join(" "));
+                        } else {
+                           await $`${line}`
+                        }
+
                     }
-
+                    process.stdout.write(prompt);
                 }
-                await repl_loop(client);
 
-            } catch (e) { console.error(`Error: ${e.name} ${e.message}`); await repl_loop(client); }
+            } catch (e) {
+                console.error(`Exited. ${e.name} ${e.message}`);
+                process.exit()
+            }
         }
-        await repl_loop(this)
         console.log("Ended")
     }
 
