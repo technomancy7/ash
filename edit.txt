@@ -1,0 +1,5 @@
+this is a new entry
+[[slang]]
+tis diary is good
+{{weather:cold}} {{sickday}}
+or not

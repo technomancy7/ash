@@ -1,5 +1,5 @@
 const argParser = require('yargs-parser')
-var tk = require( 'terminal-kit' ).terminal;
+//var tk = require( 'terminal-kit' ).terminal;
 
 import TOML from 'smol-toml';
 import { Glob } from "bun";
@@ -37,6 +37,7 @@ export class AshContext {
         this.version = ASH_VERSION;
         this.parent = parent;
         this.dayjs = dayjs;
+        //this.tk = tk;
         this.args = {}
         this.command = ""
         this.line = []
@@ -148,6 +149,16 @@ export class AshContext {
         let editor = this.get_config("tools.editor")
         console.log("Opening", path, "in tools.editor: ", editor)
         await $`${editor} ${path}`;
+        let edittxt = Bun.file(path)
+        let editsaved = await edittxt.exists();
+        if(editsaved) {
+            let text = await edittxt.text();
+            return text
+        }
+    }
+
+    async delete_file(path) {
+        await Bun.file(path).delete();
     }
 
     coerce_type(input) {
@@ -266,12 +277,18 @@ export class AshContext {
 
 
     async get_input(placeholder) {
-        //const res = await $`gum input --placeholder "${placeholder}"`;
-        //return res.text().trim();
         const proc = Bun.spawn(["gum", "input", "--placeholder", placeholder]);
         const text = await new Response(proc.stdout).text();
 
         return text
+    }
+
+    question(prompt) {
+        this.tk( `${prompt} [Y|n]\n` ) ;
+
+        this.tk.yesOrNo( { yes: [ 'y' , 'ENTER' ] , no: [ 'n' ] } , function( error , result ) {
+            return result;
+        });
     }
 
     async write_panel(title, text) {
@@ -408,12 +425,12 @@ export class AshContext {
         }
 
         this.writeln = async function(text) {
-              tk(this.format_text(this.strip_formatting(text)))
+              tk(this.format_text(text))
               tk("\n")
         }
 
         this.write_panel = async function(title, text) {
-              tk("["+title+"] "+this.format_text(this.strip_formatting(text)))
+              tk("["+title+"]\n"+this.format_text(text))
               tk("\n")
         }
 
@@ -421,6 +438,7 @@ export class AshContext {
             if ( name === 'CTRL_C' ) { process.exit() }
         });
 
+        const use_fallback = this.get_config("repl.fallback_enabled", false)
         const username = await this.get_user_name();
         this.say(`Interactive mode activated. What is your request, ${username}?`)
         process.on("SIGINT", async () => { process.exit() });
@@ -439,11 +457,14 @@ export class AshContext {
 
                 if(all_actions.includes(line.split(" ")[0])) {
                     await client.execute(line)
-                } else {
+                } else if(use_fallback == true){
                     if(line.split(" ")[0] == "cd") {
                         await $.cwd(line.split(" ").slice(1).join(" "));
                     } else {
-                        await $`${line}`
+                        let shell = client.get_config("repl.fallback_shell", "bash -c")
+                       // let cmd = `${shell} ${line}`
+                        await $`${{raw: shell}}" ${line}`.env({ ...process.env});
+                        //client.writeln(resp)
                     }
 
                 }

@@ -1,6 +1,8 @@
 import { $ } from "bun";
-//TODO
-//make the set command only take key.value and use --db to specify file, use "default" if not given
+
+// OVERHAUL TODO
+// Rewrite codex to all use one db file instead of being spread across more
+
 export class Action {
     constructor(ctx) {
         this.ctx = ctx;
@@ -16,7 +18,6 @@ export class Action {
 
     async format_entry(data) {
         if(this.ctx.args.json)
-            //console.log(data)
             console.log(`${JSON.stringify(data)}`)
         else {
             let output = [];
@@ -42,7 +43,7 @@ export class Action {
                 } else if(typeof val == "number" || typeof val == "boolean") {
                     output.push(`[green]${key}[reset] = [yellow]${val}[reset]`)
 
-                } else if(typeof val == "object" || val.isArray()) {
+                } else if(typeof val == "object" && val.constructor == Array) {
                     output.push(`[green]${key}[reset]:`)
                     for(const line of val) {
                         if(line.startsWith("x ")) {
@@ -52,9 +53,45 @@ export class Action {
                         }
 
                     }
+                } else if(typeof val == "object") {
+                    output.push(`[green]${key}[reset]:`)
+
+                    for(const [key, objv] of Object.entries(val)) {
+                        if(typeof objv == "string" && objv.includes("\n")) {
+                            let i = 0;
+                            for(const line of objv.split("\n")) {
+                                output.push(` [orange]${key}[reset][${i}] = [yellow]"${line}"[reset]`);
+                                i = i + 1;
+                            }
+
+                        } else if(typeof objv == "string" && objv.startsWith("@ ")) {
+                            let ts = this.ctx.dayjs(objv.slice(2), "DD-MM-YYYY")
+                            output.push(` [orange]${key}[reset] = [cyan]"${ts.fromNow()}"[reset] (${objv.slice(2)})`)
+
+                        } else if(typeof objv == "object" && objv.constructor == Array) {
+                            output.push(` [orange]${key}[reset]:`)
+                            for(const line of objv) {
+                                if(line.startsWith("x ")) {
+                                    output.push(`   - [[green]X[reset]] [yellow]"${line.slice(2)}"[reset]`);
+                                } else {
+                                    output.push(`   - [ ] [yellow]"${line}"[reset]`);
+                                }
+
+                            }
+                        } else if(typeof objv == "number" || typeof objv == "boolean") {
+                            output.push(` [orange]${key}[reset] = [yellow]${objv}[reset]`)
+
+                        } else {
+                            output.push(` [orange]${key}[reset] = [yellow]"${objv}"[reset]`);
+                        }
+
+
+
+                    }
                 }
             }
-            this.ctx.write_panel(data._parent_+"."+data._key_, output.join("\n"))
+
+            this.ctx.write_panel(data._key_, output.join("\n"))
         }
     }
 
@@ -80,41 +117,36 @@ export class Action {
         if(filter_type == "=="){
             return data[filter_key] == filter_value;
         }
+
         if(filter_type == "!="){
             return data[filter_key] != filter_value;
         }
     }
+
     async on_execute() {
         const cmd = this.ctx.line[0] || "ls";
         const params = this.ctx.line.slice(1)
         const line = params.join(" ")
-        let db = this.ctx.args.db;
+        let db = this.ctx.args.db || "data";
         let data = {}
+
+        function char_count(str, letter) {
+            var letter_Count = 0;
+            for (var position = 0; position < str.length; position++) { if (str.charAt(position) == letter) letter_Count += 1 }
+            return letter_Count;
+        }
 
         switch (cmd) {
             case 'list':
             case 'ls':
-                data = await this.ctx.load_all_data("codex")
+                data = await this.ctx.load_data("codex", db)
                 if(this.ctx.args.json) return console.log(`${JSON.stringify(data)}`)
                 if(db && typeof db == "string") {
-                    for (const [key, value] of Object.entries(data[db])) {
+                    for (const [key, value] of Object.entries(data)) {
                         if(!this.checkFilter(value)) continue;
                         if(!value.hidden) {
                             value._key_ = key;
-                            value._parent_ = db;
                             await this.format_entry(value);
-                        }
-                    }
-                } else {
-                    for (const [parent, datafile] of Object.entries(data)) {
-                        for (const [key, value] of Object.entries(datafile)) {
-                            if(value._self_ && value._self_._hidden_ == true) continue;
-                            if(!this.checkFilter(value)) continue;
-                            if(!value._hidden_) {
-                                value._key_ = key;
-                                value._parent_ = parent;
-                                await this.format_entry(value);
-                            }
                         }
                     }
                 }
@@ -122,119 +154,144 @@ export class Action {
                 break;
 
             case 'get':
-                let pointer = line;
-                let spec_key = undefined;
+                data = await this.ctx.load_data("codex", db);
+                if(char_count(line, ".") == 0) {
+                    let entry = data[line];
+                    entry._key_ = line;
+                    await this.format_entry(entry)
 
-                if(line.includes(".")) {
-                    pointer = line.split(".")[0];
-                    spec_key = line.split(".")[1];
+                } else if(char_count(line, ".") == 1) {
+                    let entry = data[line.split(".")[0]];
+                    let sub = entry[line.split(".")[1]]
+                    if(typeof sub == "object") {
+                        sub._key_ = line;
+                        await this.format_entry(sub)
+                    } else { this.ctx.writeln(sub) }
+
+                } else if(char_count(line, ".") == 2) {
+                    let entry = data[line.split(".")[0]];
+                    let sub = entry[line.split(".")[1]]
+                    let final_sub = sub[line.split(".")[2]]
+                    if(typeof final_sub == "object") {
+                        final_sub._key_ = line;
+                        await this.format_entry(final_sub)
+                    } else { this.ctx.writeln(final_sub) }
+
+                } else if(char_count(line, ".") == 3) {
+                    let entry = data[line.split(".")[0]];
+                    let sub = entry[line.split(".")[1]]
+                    let final_sub = sub[line.split(".")[2]]
+                    let final_value = final_sub[line.split(".")[3]]
+
+                    this.ctx.writeln(`${final_value}`)
                 }
 
-                data = await this.ctx.load_all_data("codex");
-
-                for (const [parent, datafile] of Object.entries(data)) {
-                    if(db && db != parent) continue;
-                    for (const [key, value] of Object.entries(datafile)) {
-                        if(value._self_ && value._self_.hidden == true) continue;
-                        if(!this.checkFilter(value)) continue;
-
-                        if(key == pointer) {
-                            if(spec_key) {
-                                if(this.ctx.args.open) {
-                                    await $`xdg-open ${value[spec_key]}`;
-                                } else {
-                                    this.ctx.writeln(`${key}.${spec_key} = ${value[spec_key]}`);
-                                }
-
-                            } else {
-                                if(this.ctx.args.open) {
-                                    await $`xdg-open ${value[this.ctx.args.open]}`;
-                                    return;
-                                }
-                                value._key_ = key;
-                                value._parent_ = parent;
-                                await this.format_entry(value);
-                                return;
-                            }
-
-                        }
-                    }
-                }
                 break;
 
             case "append":
-                data = await this.ctx.load_all_data("codex")
-                if(!db) db = "default"
-                let aparent = params[0].split(".")[0].trim();
-                let asub = params[0].split(".")[1].trim();
-                let aval = params.slice(1).join(" ").trim();
-                if(data[db] == undefined) data[db] = {}
-                if(data[db][aparent] == undefined) data[db][aparent] = {}
+                let value = line.split(" ").slice(1).join(" ");
+                let appendline = line.split(" ")[0];
+                data = await this.ctx.load_data("codex", db);
+                if(char_count(appendline, ".") == 1) {
+                    let entry = data[appendline.split(".")[0]];
+                    let sub = entry[appendline.split(".")[1]]
 
-                if(typeof data[db][aparent][asub] == "object" || data[db][aparent][asub].isArray()) {
-                    data[db][aparent][asub].push(aval);
-                    await this.ctx.save_data(data[db], "codex", db)
-                    this.ctx.writeln(`${db}.${aparent}.${asub} = ${data[db][aparent][asub]}`)
-                } else {
-                    this.ctx.writeln(`Object not appendable.`)
+                    if(typeof sub == "object" && sub.constructor == Array) {
+                        data[appendline.split(".")[0]][appendline.split(".")[1]].push(value)
+                        await this.ctx.save_data(data, "codex", db)
+                        this.ctx.writeln(`Appended.`)
+                    } else { this.ctx.writeln("Entry can't be appended.") }
+
+                } else if(char_count(appendline, ".") == 2) {
+                    let entry = data[appendline.split(".")[0]];
+                    let sub = entry[appendline.split(".")[1]]
+                    let final_sub = sub[appendline.split(".")[2]]
+
+                    if(typeof final_sub == "object" && final_sub.constructor == Array) {
+                        data[appendline.split(".")[0]][appendline.split(".")[1]][appendline.split(".")[2]].push(value)
+                        await this.ctx.save_data(data, "codex", db)
+                        this.ctx.writeln(`Appended.`)
+                    } else { this.ctx.writeln("Entry can't be appended.") }
+
                 }
                 break;
 
             case "unappend":
-                data = await this.ctx.load_all_data("codex")
-                if(!db) db = "default"
-                let unparent = params[0].split(".")[0].trim();
-                let unsub = params[0].split(".")[1].trim();
-                let unval = params.slice(1).join(" ").trim();
-                if(data[db] == undefined) data[db] = {}
-                if(data[db][unparent] == undefined) data[db][unparent] = {}
+                let unvalue = line.split(" ").slice(1).join(" ");
+                let unappendline = line.split(" ")[0];
+                data = await this.ctx.load_data("codex", db);
+                if(char_count(unappendline, ".") == 1) {
+                    let entry = data[unappendline.split(".")[0]];
+                    let sub = entry[unappendline.split(".")[1]]
 
-                if(typeof data[db][unparent][unsub] == "object" || data[db][unparent][unsub].isArray()) {
-                    data[db][unparent][unsub] = this.ctx.removeItemOnce(data[db][unparent][unsub], unval);
-                    await this.ctx.save_data(data[db], "codex", db)
-                    this.ctx.writeln(`${db}.${unparent}.${unsub} = ${data[db][unparent][unsub]}`)
-                } else {
-                    this.ctx.writeln(`Object not appendable.`)
+                    if(typeof sub == "object" && sub.constructor == Array) {
+                        data[unappendline.split(".")[0]][unappendline.split(".")[1]] = this.ctx.removeItemOnce(data[unappendline.split(".")[0]][unappendline.split(".")[1]], unvalue)
+                        await this.ctx.save_data(data, "codex", db)
+                        this.ctx.writeln(`Unappended.`)
+                    } else { this.ctx.writeln("Entry can't be appended.") }
+
+                } else if(char_count(unappendline, ".") == 2) {
+                    let entry = data[unappendline.split(".")[0]];
+                    let sub = entry[unappendline.split(".")[1]]
+                    let final_sub = sub[unappendline.split(".")[2]]
+
+                    if(typeof final_sub == "object" && final_sub.constructor == Array) {
+                        data[unappendline.split(".")[0]][unappendline.split(".")[1]][unappendline.split(".")[2]] = this.ctx.removeItemOnce(data[unappendline.split(".")[0]][unappendline.split(".")[1]][unappendline.split(".")[2]], unvalue);
+                        await this.ctx.save_data(data, "codex", db)
+                        this.ctx.writeln(`Unappended.`)
+                    } else { this.ctx.writeln("Entry can't be appended.") }
+
                 }
                 break;
 
             case "set":
-                data = await this.ctx.load_all_data("codex")
-                if(!db) db = "default"
-                let parent = params[0].split(".")[0].trim();
-                let sub = params[0].split(".")[1].trim();
-                let val = this.ctx.coerce_type(params.slice(1).join(" ").trim());
-                if(data[db] == undefined) data[db] = {}
-                if(data[db][parent] == undefined) data[db][parent] = {}
-                data[db][parent][sub] = val;
-                await this.ctx.save_data(data[db], "codex", db)
-                this.ctx.writeln(`${db}.${parent}.${sub} = ${val} (${typeof val})`)
+                let setvalue = this.ctx.coerce_type(line.split(" ").slice(1).join(" "));
+                let setine = line.split(" ")[0];
+                data = await this.ctx.load_data("codex", db);
+                if(char_count(setine, ".") == 1) {
+                    let entry = data[setine.split(".")[0]];
+                    let sub = entry[setine.split(".")[1]]
+
+                    data[setine.split(".")[0]][setine.split(".")[1]] = setvalue
+                    await this.ctx.save_data(data, "codex", db)
+                    this.ctx.writeln(`Set.`)
+
+
+                } else if(char_count(setine, ".") == 2) {
+                    let entry = data[setine.split(".")[0]];
+                    let sub = entry[setine.split(".")[1]]
+                    let final_sub = sub[setine.split(".")[2]]
+
+                    if(typeof sub == "object") {
+                        data[setine.split(".")[0]][setine.split(".")[1]][setine.split(".")[2]] = setvalue
+                        await this.ctx.save_data(data, "codex", db)
+                        this.ctx.writeln(`Set.`)
+                    } else { this.ctx.writeln("Entry can't be modified.") }
+
+                }
                 break;
 
             case "unset":
-                data = await this.ctx.load_all_data("codex")
-                if(!db) db = "default"
-                let uparent = line.split(".")[0].trim();
-                let usub = line.split(".")[1].trim();
-                if(data[db] == undefined) return this.ctx.writeln("Entry does not exist.")
-                if(data[db][uparent] == undefined) return this.ctx.writeln("Entry does not exist.")
-                delete data[db][uparent][usub];
-                this.ctx.writeln(`Removed key.`)
-                await this.ctx.save_data(data[db], "codex", db)
-                break;
+                data = await this.ctx.load_data("codex", db);
+                if(char_count(line, ".") == 0) {
+                    delete data[line]
+                    await this.ctx.save_data(data, "codex", db)
+                    this.ctx.writeln(`Unset.`)
 
-            case "delete":
-            case "del":
-                let dbf = Bun.file(`${this.ctx.home}/data/codex/${line}.toml`)
-                let exists = await dbf.exists();
-                if(!exists) return this.ctx.writeln("File not found.")
-                if(confirm(`Really delete database [${line}]?`)) {
-                    await dbf.delete();
+                } else if(char_count(line, ".") == 1) {
+                    let entry = data[line.split(".")[0]];
+                    let sub = entry[line.split(".")[1]]
+
+                    delete data[line.split(".")[0]][line.split(".")[1]];
+                    await this.ctx.save_data(data, "codex", db)
+                    this.ctx.writeln(`Unset.`)
+
+
                 }
                 break;
 
             case "edit":
-                await this.ctx.edit_file(this.ctx.data_dir+"/codex/"+line+".toml")
+                await this.ctx.edit_file(this.ctx.data_dir+"/codex/"+db+".toml")
                 break
 
             default:
