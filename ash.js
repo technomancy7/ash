@@ -1,5 +1,6 @@
 const argParser = require('yargs-parser')
 //var tk = require( 'terminal-kit' ).terminal;
+var blessed = require('blessed');
 
 import TOML from 'smol-toml';
 import { Glob } from "bun";
@@ -38,6 +39,7 @@ export class AshContext {
         this.parent = parent;
         this.dayjs = dayjs;
         //this.tk = tk;
+        this.tui = blessed;
         this.args = {}
         this.command = ""
         this.line = []
@@ -413,8 +415,9 @@ export class AshContext {
     }
 
     async get_user_name() {
-        let codex = await this.load_data("codex", "addrbook")
-        return codex.self["Display Name"] || codex.self.name || "self.user";
+        //let codex = await this.load_data("codex", "addrbook")
+        //return codex.self["Display Name"] || codex.self.name || "self.user";
+        return this.get_config("user.name", "User")
     }
 
     async repl() {

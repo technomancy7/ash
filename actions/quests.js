@@ -30,7 +30,7 @@ export class Action {
         if(quest.exp) exp = `\n[green](EXP: +${quest.exp})[reset]`;
         const text = quest.text.replace(/#[^\s#]+/g, '').replace(/\s{2,}/g, ' ').trim();
         const tags = quest.text.match(/#[\w]+/g) || [];
-        await this.ctx.write_panel(`${quest.key} -> ${ts}`, `${pre}${text}${pos}${exp} [red]${tags.join(" ")}[reset]`)
+        await this.ctx.writeln(`:right_arrow: [orange]${quest.key}[reset] -> [orange]${ts}[reset]\n${pre}${text}${pos}${exp} [red]${tags.join(" ")}[reset]`)
     }
 
     pretty(quest) {

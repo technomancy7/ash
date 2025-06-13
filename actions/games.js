@@ -1,3 +1,5 @@
+var tk = require( 'terminal-kit' ).terminal;
+
 export class Action {
     constructor(ctx) {
         this.ctx = ctx;
@@ -56,6 +58,92 @@ export class Action {
         const line = params.join(" ")
 
         switch(cmd) {
+            case "textengine":
+                var blessed = this.ctx.tui;
+                var screen = blessed.screen({smartCSR: true});
+
+                screen.title = 'ASH TEXT ADVENTURE';
+
+                var theme = {
+                    fg: "white",
+                    bg: "#777777",
+                    border: { bg:'#f0f0f0' },
+                    hover: { bg: "#999999" }
+                }
+                var box = blessed.box({
+                    parent: screen,
+                    scrollable: true, alwaysScroll: true, scrollbar: true, draggable: true,
+                    top: '10%', left: 'center', width: '75%', height: '70%', content: 'Load something.',
+                    tags: true, border: { type: 'line' },
+                    style: {
+                        fg: theme.fg,
+                        bg: theme.bg,
+                        border: {
+                            fg: theme.border.fg
+                        },
+                        hover: {
+                            bg: theme.hover.bg
+                        },
+                        scrollbar: {
+                            bg: 'red',
+                            fg: 'blue'
+                        }
+                    }
+                });
+
+                var commandInput = blessed.textbox({
+                    parent: screen,
+                    draggable: true,
+                    top: "90%", left: "0%", width: 50, height: 3, border: { type: 'line' },
+                    style: {
+                        fg: theme.fg,
+                        bg: theme.bg,
+                        border: {
+                            fg: theme.border.fg
+                        },
+                        hover: {
+                            bg: theme.hover.bg
+                        }
+                    }
+                })
+
+                screen.key('i', function() {
+                    commandInput.readInput(function() {
+                        box.insertLine(0, `Bot: ${commandInput.value}`)
+                        commandInput.setValue("")
+                        screen.render();
+                    });
+                });
+
+                // Append our box to the screen.
+                //screen.append(box);
+
+                // If our box is clicked, change the content.
+                screen.key('w', function(ch, key) {
+                    box.scroll(-1)
+                    screen.render();
+                });
+                screen.key('s', function(ch, key) {
+                    box.scroll(1)
+                    screen.render();
+                });
+                // If box is focused, handle `enter`/`return` and give us some more content.
+                /*commandInput.key('enter', function(ch, key) {
+                    box.setContent(`${commandInput.value}`);
+                    commandInput.
+                    screen.render();
+                });*/
+
+                // Quit on Escape, q, or Control-C.
+                screen.key(['escape', 'q', 'C-c'], function(ch, key) {
+                    return process.exit(0);
+                });
+
+                commandInput.focus();
+
+                screen.render();
+                break;
+
             case "unscramble":
                 let time_left = this.ctx.args.t || 30;
                 let cons = this.ctx.args.c || 5;

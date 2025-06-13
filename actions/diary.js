@@ -41,9 +41,10 @@ export class Action {
                 let new_entry = await ctx.edit_file(ctx.home+"edit.txt")
                 let r = extractTags(new_entry)
                 ctx.writeln(`Entry done: ${r.cleaned}`)
-                console.log(r.tags)
+                let links = [];
+                let properties = {};
                 for(let tag of r.tags) {
-                    if(tag.startsWith("[[")) && tag.endsWith("]]")) { //link
+                    if(this.ctx.get_config("tools.shell") == "nu" && tag.startsWith("[[")) && tag.endsWith("]]")) { //link
 
                     }
                 }

@@ -1,5 +1,7 @@
 import { AshContext } from './ash';
-const LDR_VERSION = "25.5.16"
+import { Commands } from './discord/commands';
+
+// Setup ash client as the backend for the discord bot
 let ashClient = new AshContext();
 await ashClient.load_config()
 ashClient.context.commandPrefix = ashClient.get_config("discord.prefix", ".");
@@ -7,7 +9,12 @@ ashClient.context.owner_id = 206903283090980864;
 ashClient.contextDisable("aim", "appman", "system", "games", "quests", "rpg", "codex", "scriptchu")
 ashClient.context.whitelist = ashClient.get_config("discord.whitelist", [])
 ashClient.context.blacklist = ashClient.get_config("discord.blacklist", [])
+ashClient.context.interface_version = "25.5.16"
+ashClient.context.interface_name = "discord"
+ashClient.context.threads = {}
 
+// Define global constants
+const LDR_VERSION = ashClient.context.interface_version
 const token = ashClient.get_config("discord.token")
 const gatewayURL = "wss://gateway.discord.gg/?v=10&encoding=json";
 const ws = new WebSocket(gatewayURL);
@@ -69,84 +76,6 @@ let api = {
     }
 }
 
-let commands = {
-    "whitelist": async function(a, line) {
-        if(a.author.id != ashClient.context.owner_id) return await api.reply(a.context.message, "Command rejected: developer access required")
-        if(line == "") { return await api.reply(a.context.message, ashClient.context.whitelist.join(" "))}
-        if(!ashClient.context.whitelist.includes(line)) {
-            ashClient.context.whitelist.push(line)
-            ashClient.set_config("discord.whitelist", ashClient.context.whitelist)
-            await ashClient.save_config();
-            await api.reply(a.context.message, "List updated.")
-        } else await api.reply(a.context.message, "No change made.")
-    },
-    "unwhitelist": async function(a, line) {
-        if(a.author.id != ashClient.context.owner_id) return await api.reply(a.context.message, "Command rejected: developer access required")
-        if(line == "") { return await api.reply(a.context.message, "No changes made.")}
-        if(ashClient.context.whitelist.includes(line)) {
-            ashClient.context.whitelist = ashClient.removeItemAll(ashClient.context.whitelist, line)
-            ashClient.set_config("discord.whitelist", ashClient.context.whitelist)
-            await ashClient.save_config();
-            await api.reply(a.context.message, "List updated.")
-        } else await api.reply(a.context.message, "No change made.")
-    },
-    "blacklist": async function(a, line) {
-        if(a.author.id != ashClient.context.owner_id) return await api.reply(a.context.message, "Command rejected: developer access required")
-        if(line == "") { return await api.reply(a.context.message, ashClient.context.blacklist.join(" "))}
-        if(!ashClient.context.blacklist.includes(line)) {
-            ashClient.context.blacklist.push(line)
-            ashClient.set_config("discord.blacklist", ashClient.context.blacklist)
-            await ashClient.save_config();
-            await api.reply(a.context.message, "List updated.")
-        } else await api.reply(a.context.message, "No change made.")
-    },
-    "unblacklist": async function(a, line) {
-        if(a.author.id != ashClient.context.owner_id) return await api.reply(a.context.message, "Command rejected: developer access required")
-        if(line == "") { return await api.reply(a.context.message, "No changes made.") }
-
-        if(ashClient.context.blacklist.includes(line)) {
-            ashClient.context.blacklist = ashClient.removeItemAll(ashClient.context.blacklist, line)
-            ashClient.set_config("discord.blacklist", ashClient.context.blacklist)
-            await ashClient.save_config();
-            await api.reply(a.context.message, "List updated.")
-        } else await api.reply(a.context.message, "No change made.")
-    },
-    "devmode": async function(a, line) {
-        if(a.author.id != ashClient.context.owner_id) return await api.reply(a.context.message, "Command rejected: developer access required")
-        if(line == "") { return await api.reply(a.context.message, `discord.developer = ${ashClient.get_config('discord.developer')}`) }
-
-        if(["y", "yes", "true", "on"].includes(line)) {
-            await ashClient.set_config("discord.developer", true);
-            await ashClient.save_config();
-            await api.reply(a.context.message, "Developer mode enabled.")
-        } else if(["n", "no", "false", "off"].includes(line)) {
-            await ashClient.set_config("discord.developer", false);
-            await ashClient.save_config();
-            await api.reply(a.context.message, "Developer mode disabled.")
-        } else {
-            await api.reply(a.context.message, "Unknown request.")
-        }
-
-    },
-    "self": async function(a, line) {
-        let packageConf = await ashClient.get_package_config()
-        let deps = [];
-
-        for(const packageName of Object.keys(packageConf.dependencies)){
-            deps.push(`${packageName} = "${packageConf.dependencies[packageName]}"`)
-        }
-        await api.reply(a.context.message, `\`\`\`toml\n[core]\nversion = "${ashClient.version}"\n\n[core.dependencies]\n${deps.join("\n")}\n\n[interface.discord]\nversion = "${LDR_VERSION}"\napi = "${api_base}"\ngateway = "${gatewayURL}"\n\n[javascript]\nruntime = "bun ${Bun.version}"\n\`\`\``)
-    },
-    "quit": async function(a, line) {
-        if(a.author.id != ashClient.context.owner_id) return await api.reply(a.context.message, "Command rejected: developer access required")
-        await api.reply(a.context.message, "Closing connection: 3001 Administrator shutdown.")
-        await Bun.sleep(1000)
-        ws.close(3001, "Administrator shutdown.");
-        await Bun.sleep(1000)
-        process.exit()
-    }
-}
-
 function passContext(contextType, message, client) {
     if(contextType == "message") {
           client.context.session = "discord";
@@ -159,6 +88,22 @@ function passContext(contextType, message, client) {
           client.context.id = message.id;
           client.context.message_id = message.id;
           client.context.channel_id = message.channel_id;
+
+          client.context.gateway = gatewayURL;
+          client.context.api_base = api_base;
+
+          client.context.createThread = async function(threadId, fn, delay = 1000) {
+              client.context.threads[threadId] = {
+                  id: setInterval(fn, delay),
+                  delay: delay,
+                  created: client.dayjs().format()
+              }
+          }
+
+          client.context.stopThread = async function(threadId) {
+              clearInterval(client.context.threads[threadId].id);
+              delete client.context.threads[threadId];
+          }
 
           client.writeln = async function(text) {
               if(!this.context.output) this.context.output = [];
@@ -188,6 +133,7 @@ ws.onmessage = async (event) => {
         if (t === "READY") {
             console.log("Bot is ready!");
 
+
         } else if (t === "MESSAGE_CREATE") {
             if(d.author.bot == true) return;
             if(!d.content.startsWith(ashClient.context.commandPrefix)) return;
@@ -204,9 +150,14 @@ ws.onmessage = async (event) => {
                 if(ashClient.context.blacklist.includes(d.author.id)) return await api.reply(d, "Command rejected: user blacklisted")
             }
 
-            if(commands[d.content.split(" ")[0].slice(1)]) {
+            if(Commands[d.content.split(" ")[0].slice(1)]) {
                 let lcmdCtx = passContext("message", d, ashClient.clone());
-                commands[d.content.split(" ")[0].slice(1)](lcmdCtx, d.content.split(" ").slice(1).join(" "))
+
+                await Commands[d.content.split(" ")[0].slice(1)](lcmdCtx, d.content.split(" ").slice(1).join(" "))
+
+                if(lcmdCtx.context.output && lcmdCtx.context.output.length > 0) {
+                    await lcmdCtx.context.api.reply(lcmdCtx.context.message, lcmdCtx.context.output.join("\n"))
+                }
 
             } else {
                 let cmd = d.content.slice(ashClient.context.commandPrefix.length);
