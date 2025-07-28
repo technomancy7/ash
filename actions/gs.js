@@ -10,7 +10,7 @@ export class Action {
             "version": "0.1"
         }
     }
-    
+
     async get_all_games(r = 1000) {
         const data = await fetch(`https://master.333networks.com/json/all?r=${r}`)
         const js = await data.json()
@@ -20,18 +20,24 @@ export class Action {
         }
         return names;
     }
-    
+
     async get_servers(game_name, r = 100) {
         const data = await fetch(`https://master.333networks.com/json/${game_name}?r=${r}`)
         const js = await data.json()
         return js;
     }
-    
+
+    async get_server(ip, port, game_name = "server") {
+        const data = await fetch(`https://master.333networks.com/json/${game_name}/${ip}:${port}`)
+        const js = await data.json()
+        return js;
+    }
+
     async on_execute() {
         const cmd = this.ctx.line[0];
         const params = this.ctx.line.slice(1)
         const line = params.join(" ")
-        
+
         switch(cmd) {
             case "i":
             case "g":
@@ -40,7 +46,7 @@ export class Action {
                 let servers = await this.get_servers(g)
                 console.log(servers)
                 break;
-            
+
             default:
                 console.log("Unknown command")
                 break;

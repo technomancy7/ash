@@ -72,6 +72,11 @@ let commands = {
         await a.writeln("Creating new thread")
         await a.context.createThread("test", function() { console.log("test") }, 1000)
     },
+    "test": async function(a, line) {
+        let msg = await a.context.reply("It works")
+        await a.context.api.edit_message(msg, "Edited!");
+
+    },
     "threads": async function(a, line) {
         let api = a.context.api;
         if(Object.keys(a.context.threads).length == 0) {

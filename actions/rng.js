@@ -19,7 +19,7 @@ export class Action {
             "version": "0.9"
         }
     }
-    
+
     dice_roll(formula) {
         let count = Number(formula.split("d")[0]);
         let modifiers = formula.split("d")[1];
@@ -31,7 +31,7 @@ export class Action {
         } else {
             sides = Number(modifiers)
         }
-        
+
         let output = {
             "total": modifier,
             "modifier": modifier,
@@ -44,13 +44,13 @@ export class Action {
             output.rolls.push(roll)
             if(output.filter && roll < output.filter) continue;
             output.total += roll;
-            
+
         }
-        
+
         return output;
 
     }
-    
+
     random(min,max) {
         return Math.floor((Math.random())*(max-min+1))+min;
     }
@@ -58,35 +58,33 @@ export class Action {
     async on_execute() {
         let line = this.ctx.line.join(" ");
         if(!line) line = "flip";
-        
+
         if(line == "flip"){
             if(Math.random() >= 0.5) {
                 this.ctx.writeln("Heads!");
             } else {
                 this.ctx.writeln("Tails!");
             }
-            
+
         } else if(line.includes("d")) {
             let result = this.dice_roll(line)
-            if(this.ctx.args.json) 
+            if(this.ctx.args.json)
                 console.log(result)
             else
                 this.ctx.writeln(`${result.total}`)
-            
+
         } else if(line.includes(",")) {
             const options = line.split(",");
             const randomElement = options[Math.floor(Math.random() * options.length)];
             this.ctx.writeln(`${randomElement.trim()}`)
-            
+
         } else if(line.includes("-")) {
             this.ctx.writeln(`${this.random(Number(line.split("-")[0]), Number(line.split("-")[1]))}`)
-            
+
         } else {
             if(isNaN(line)) {
-                console.log("isnan", line)
                 this.ctx.writeln(`${this.random(0, 100)}`)
             } else {
-                console.log("not nan", line)
                 this.ctx.writeln(`${this.random(0, Number(line))}`)
             }
         }

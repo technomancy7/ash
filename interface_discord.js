@@ -6,10 +6,10 @@ let ashClient = new AshContext();
 await ashClient.load_config()
 ashClient.context.commandPrefix = ashClient.get_config("discord.prefix", ".");
 ashClient.context.owner_id = 206903283090980864;
-ashClient.contextDisable("aim", "appman", "system", "games", "quests", "rpg", "codex", "scriptchu")
+ashClient.contextDisable("aim", "auto", "appman", "system", "games", "quests", "rpg", "codex", "scriptchu")
 ashClient.context.whitelist = ashClient.get_config("discord.whitelist", [])
 ashClient.context.blacklist = ashClient.get_config("discord.blacklist", [])
-ashClient.context.interface_version = "25.5.16"
+ashClient.context.interface_version = "25.7.28"
 ashClient.context.interface_name = "discord"
 ashClient.context.threads = {}
 
@@ -35,6 +35,52 @@ ws.onopen = () => {
     ws.send(JSON.stringify(identifyPayload));
 };
 
+class DiscordEmbed {
+    constructor(title = undefined, description = undefined) {
+        this.type = "rich";
+
+        this.title = title;
+        this.description = description;
+        this.url = undefined;
+        this.timestamp = undefined;
+        this.color = undefined;
+        this.colour = undefined;
+        this.footer = undefined;
+
+        this.image = undefined;
+        this.thumbnail = undefined;
+        this.video = undefined;
+        this.provider = undefined;
+        this.author = undefined;
+
+        this.fields = []
+    }
+
+    set_color(colName) { this.setColour(colName); }
+
+    set_colour(colName) {
+        this.colour = Bun.color(colName, "number");
+        this.color = this.colour
+    }
+
+    json() {
+        return {
+            "title": this.title,
+            "type": this.type,
+            "description": this.description,
+            "url": this.url,
+            "timestamp": this.timestamp,
+            "color": this.color || this.colour,
+            "footer": this.footer,
+            "image": this.image,
+            "thumbnail": this.thumbnail,
+            "video": this.video,
+            "provider": this.provider,
+            "author": this.author,
+            "author": this.fields,
+        }
+    }
+}
 
 let api = {
     "get": async function(type, object_id) {
@@ -49,8 +95,36 @@ let api = {
             return js
         } catch (error) { console.error("Error getting object:", error); }
     },
-    "send_message": async function(channel_id, text) {
+
+    "delete_message": async function(message) {
+        try {
+            const response = await fetch(`${api_base}
+/channels/${message.channel_id}/messages/${message.id}`, { method: "DELETE", headers: headers });
+
+            if (!response.ok) console.error(`Error deleting object: [${object_id}]`, response.status, response.statusText);
+            const js = await response.json();
+            return js
+        } catch (error) { console.error("Error deleting object:", error); }
+    },
+
+    "edit_message": async function(message, new_content, embed = undefined) {
+        try {
+            const response = await fetch(`${api_base}channels/${message.channel_id}/messages/${message.id}`, {
+                method: "PATCH",
+                headers: headers,
+                body: JSON.stringify({ content: new_content })
+            });
+
+            if (!response.ok) console.error(`Error sending message: [${new_content}]`, response.status, response.statusText);
+            return response.json()
+        } catch (error) { console.error("Error sending message:", error); }
+    },
+
+    "send_message": async function(channel, text, embed = undefined) {
         if(!text) return;
+
+        if(typeof channel == "object") channel = channel.id;
+
         try {
             const response = await fetch(`${api_base}channels/${channel_id}/messages`, {
                 method: "POST",
@@ -59,11 +133,13 @@ let api = {
             });
 
             if (!response.ok) console.error(`Error sending message: [${text}]`, response.status, response.statusText);
+            return response.json()
         } catch (error) { console.error("Error sending message:", error); }
     },
 
-    "reply": async function(message, text) {
+    "reply": async function(message, text, embed = undefined) {
         if(!text) return;
+
         try {
             const response = await fetch(`${api_base}channels/${message.channel_id}/messages`, {
                 method: "POST",
@@ -72,62 +148,84 @@ let api = {
             });
 
             if (!response.ok) console.error(`Error sending message: [${text}]`, response.status, response.statusText);
+
+            return response.json()
+
         } catch (error) { console.error("Error sending message:", error); }
     }
 }
 
 function passContext(contextType, message, client) {
     if(contextType == "message") {
-          client.context.session = "discord";
-          client.context.member = message.member;
-          client.context.author = message.author;
-          client.context.author_id = message.author.id;
-          client.context.api = api;
-          client.context.message = message;
-          client.context.content = message.content;
-          client.context.id = message.id;
-          client.context.message_id = message.id;
-          client.context.channel_id = message.channel_id;
+            client.context.session = "discord";
+            client.context.member = message.member;
+            client.context.author = message.author;
+            client.context.author_id = message.author.id;
+            client.context.api = api;
+            client.context.message = message;
+            client.context.content = message.content;
+            client.context.id = message.id;
+            client.context.message_id = message.id;
+            client.context.channel_id = message.channel_id;
 
-          client.context.gateway = gatewayURL;
-          client.context.api_base = api_base;
+            client.context.gateway = gatewayURL;
+            client.context.api_base = api_base;
 
-          client.context.createThread = async function(threadId, fn, delay = 1000) {
-              client.context.threads[threadId] = {
-                  id: setInterval(fn, delay),
-                  delay: delay,
-                  created: client.dayjs().format()
-              }
-          }
 
-          client.context.stopThread = async function(threadId) {
-              clearInterval(client.context.threads[threadId].id);
-              delete client.context.threads[threadId];
-          }
+            client.context.get_channel = async function(id) {
+                if(id == undefined) id = client.context.channel_id;
+                let c = await api.get("channel", id)
+                return c;
+            }
 
-          client.writeln = async function(text) {
-              if(!this.context.output) this.context.output = [];
-              this.context.output.push(this.format_text(this.strip_formatting(text)))
-          }
+            client.context.send = async function(text) {
+                let msg = await api.send_message(message.channel_id, text)
+                return msg
+            }
 
-          client.write_panel = async function(title, text) {
-              if(!this.context.output) this.context.output = [];
-              this.context.output.push("```ini\n["+title+"]\n"+text+"\n```")
-          }
-          return client
+            client.context.reply = async function(text) {
+                let msg = await api.reply(client.context.message, text)
+                return msg
+            }
+
+            client.context.createThread = async function(threadId, fn, delay = 1000) {
+                client.context.threads[threadId] = {
+                    id: setInterval(fn, delay),
+                    delay: delay,
+                    created: client.dayjs().format()
+                }
+            }
+
+            client.context.stopThread = async function(threadId) {
+                clearInterval(client.context.threads[threadId].id);
+                delete client.context.threads[threadId];
+            }
+
+            client.writeln = async function(text) {
+                if(!this.context.output) this.context.output = [];
+                this.context.output.push(this.format_text(this.strip_formatting(text)))
+            }
+
+            client.write_panel = async function(title, text) {
+                if(!this.context.output) this.context.output = [];
+                this.context.output.push("```ini\n["+title+"]\n"+text+"\n```")
+            }
+            return client
     }
 }
+
 ws.onmessage = async (event) => {
     const data = JSON.parse(event.data);
     const { op, d, t } = data;
 
     switch (op) {
       case 10: // Hello
-        const heartbeatInterval = d.heartbeat_interval;
-        console.log(`Heartbeat interval: ${heartbeatInterval}`);
+            console.log(op, d, t)
+            const heartbeatInterval = d.heartbeat_interval;
+            console.log(`Heartbeat interval: ${heartbeatInterval}`);
 
-        setInterval(() => { ws.send(JSON.stringify({ op: 1, d: null })); }, heartbeatInterval);
-        break;
+            setInterval(() => { ws.send(JSON.stringify({ op: 1, d: null })); }, heartbeatInterval);
+            break;
 
       case 0: // Dispatch (Events)
         if (t === "READY") {
